@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KTNLocation Service</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;600;800&family=JetBrains+Mono:wght@400;700&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #050505;
+            --surface-color: rgba(20, 20, 22, 0.6);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --accent-primary: #ff3366;
+            --accent-secondary: #00e6ff;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0ab;
+            --font-heading: 'Bricolage Grotesque', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-heading);
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .ambient-light {
+            position: absolute;
+            width: 80vw;
+            height: 80vw;
+            border-radius: 50%;
+            background: radial-gradient(circle at center, rgba(255, 51, 102, 0.15) 0%, rgba(0, 230, 255, 0.1) 30%, transparent 70%);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            filter: blur(100px);
+            z-index: 0;
+            animation: pulse-light 10s ease-in-out infinite alternate;
+            pointer-events: none;
+        }
+
+        @keyframes pulse-light {
+            0% {
+                transform: translate(-50%, -50%) scale(0.8) rotate(0deg);
+                opacity: 0.8;
+            }
+
+            100% {
+                transform: translate(-50%, -50%) scale(1.2) rotate(45deg);
+                opacity: 1;
+            }
+        }
+
+        .container {
+            position: relative;
+            z-index: 10;
+            width: 100%;
+            max-width: 600px;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        .hero-section {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .title {
+            font-size: 3.5rem;
+            font-weight: 800;
+            letter-spacing: -0.04em;
+            line-height: 1.1;
+            background: linear-gradient(135deg, var(--text-primary) 0%, rgba(255, 255, 255, 0.4) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            opacity: 0;
+            animation: slide-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            animation-delay: 0.1s;
+        }
+
+        .subtitle {
+            font-size: 1.125rem;
+            color: var(--text-secondary);
+            font-weight: 400;
+            opacity: 0;
+            animation: slide-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            animation-delay: 0.2s;
+        }
+
+        .status-card {
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 2rem;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            opacity: 0;
+            animation: slide-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            animation-delay: 0.3s;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s ease;
+        }
+
+        .status-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5), 0 0 20px rgba(255, 51, 102, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.15);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .card-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--accent-secondary);
+            box-shadow: 0 0 10px var(--accent-secondary);
+            animation: blink 2s infinite ease-in-out;
+        }
+
+        @keyframes blink {
+
+            0%,
+            100% {
+                opacity: 1;
+                box-shadow: 0 0 10px var(--accent-secondary);
+            }
+
+            50% {
+                opacity: 0.4;
+                box-shadow: 0 0 2px var(--accent-secondary);
+            }
+        }
+
+        .data-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .data-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .data-label {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .data-value {
+            font-family: var(--font-mono);
+            font-size: 1rem;
+            color: var(--text-primary);
+        }
+
+        .api-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 1rem;
+            padding: 0.75rem 1.5rem;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            color: var(--text-primary);
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 600;
+            width: max-content;
+            transition: all 0.2s ease;
+            opacity: 0;
+            animation: slide-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            animation-delay: 0.4s;
+            cursor: pointer;
+        }
+
+        .api-link:hover {
+            background: var(--text-primary);
+            color: var(--bg-color);
+            transform: translateY(-2px);
+        }
+
+        .api-link svg {
+            width: 16px;
+            height: 16px;
+            transition: transform 0.2s ease;
+        }
+
+        .api-link:hover svg {
+            transform: translateX(4px);
+        }
+
+        @keyframes slide-up {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* 终端打字效果 */
+        .terminal-block {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 8px;
+            font-family: var(--font-mono);
+            font-size: 0.875rem;
+            color: #4ade80;
+            border: 1px solid rgba(74, 222, 128, 0.1);
+        }
+
+        .loading-dots::after {
+            content: '';
+            animation: dots 1.5s steps(4, end) infinite;
+        }
+
+        @keyframes dots {
+
+            0%,
+            20% {
+                content: '';
+            }
+
+            40% {
+                content: '.';
+            }
+
+            60% {
+                content: '..';
+            }
+
+            80%,
+            100% {
+                content: '...';
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="ambient-light"></div>
+
+    <div class="container">
+        <div class="hero-section">
+            <h1 class="title">KTN GeoNode</h1>
+            <p class="subtitle">High-performance Geolocation API & Routing Service</p>
+        </div>
+
+        <div class="status-card" id="statusCard">
+            <div class="card-header">
+                <div class="card-title">
+                    <div class="indicator" id="statusIndicator"></div>
+                    System Status
+                </div>
+            </div>
+
+            <div class="data-grid">
+                <div class="data-item">
+                    <span class="data-label">State</span>
+                    <span class="data-value" id="stateValue">Checking</span>
+                </div>
+                <div class="data-item">
+                    <span class="data-label">Version</span>
+                    <span class="data-value" id="versionValue">--</span>
+                </div>
+                <div class="data-item">
+                    <span class="data-label">Response Time</span>
+                    <span class="data-value" id="latencyValue">-- ms</span>
+                </div>
+                <div class="data-item">
+                    <span class="data-label">Server Time</span>
+                    <span class="data-value" id="timeValue">--:--:--</span>
+                </div>
+            </div>
+
+            <div class="terminal-block">
+                > <span id="logText">Establishing connection to Node<span class="loading-dots"></span></span>
+            </div>
+        </div>
+
+        <a href="/openapi/v1.json" class="api-link" target="_blank" id="openapiLink">
+            View OpenAPI Spec
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <path d="M5 12h14M12 5l7 7-7 7" />
+            </svg>
+        </a>
+    </div>
+
+    <script>
+        // 动态加载状态数据
+        async function fetchStatus() {
+            const startTime = performance.now();
+            const logText = document.getElementById('logText');
+            const stateValue = document.getElementById('stateValue');
+            const indicator = document.getElementById('statusIndicator');
+
+            try {
+                const response = await fetch('/admin/status');
+                const data = await response.json();
+                const latency = Math.round(performance.now() - startTime);
+
+                document.getElementById('versionValue').textContent = data.version || '1.0.0';
+                document.getElementById('latencyValue').textContent = latency + ' ms';
+
+                const serverTime = new Date(data.time).toLocaleTimeString('en-US', { hour12: false });
+                document.getElementById('timeValue').textContent = serverTime;
+
+                if (data.status === 'ok') {
+                    stateValue.textContent = 'ONLINE';
+                    stateValue.style.color = '#4ade80';
+                    indicator.style.backgroundColor = '#4ade80';
+                    indicator.style.boxShadow = '0 0 10px #4ade80';
+                    logText.innerHTML = `Connected successfully. Latency: ${latency}ms.<br>> Ready to handle requests.`;
+                    logText.style.color = '#4ade80';
+                }
+            } catch (error) {
+                stateValue.textContent = 'OFFLINE';
+                stateValue.style.color = 'var(--accent-primary)';
+                indicator.style.backgroundColor = 'var(--accent-primary)';
+                indicator.style.boxShadow = '0 0 10px var(--accent-primary)';
+                logText.innerHTML = `Connection failed.<br>> Error: Node is unreachable.`;
+                logText.style.color = 'var(--accent-primary)';
+            }
+        }
+
+        // 检查环境来判断OpenAPI链接是否应该显示
+        if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+            // 如果不在本地开发环境，则不一定会挂载openapi路由，可以选择隐藏或者保留
+        }
+
+        // 初次加载和定期刷新
+        setTimeout(() => {
+            fetchStatus();
+            setInterval(fetchStatus, 5000);
+        }, 800);
+    </script>
+</body>
+
+</html>
