@@ -35,9 +35,9 @@ KTNLocation provides a single HTTP API for:
 dotnet run --project .\Api
 ```
 
-OpenAPI (Development):
+Swagger (Requires `DebugMode: true`):
 
-- `http://localhost:5186/openapi/v1.json`
+- `http://localhost:[PORT]/swagger`
 
 ## Configuration
 
@@ -51,6 +51,8 @@ Development overrides only: `Api/appsettings.Development.json` (recommended for 
   - `Redis`
 - `Server`
   - `Address`, `HttpPort`, `EnableHttps`, `HttpsPort`
+  - `DebugMode`: Controls `[DEBUG]` logs and Swagger UI visibility.
+  - `HttpsCertificatePath`, `HttpsPrivateKeyPath`, `HttpsCertificatePassword`: PEM certificate configurations for HTTPS.
 - `Redis`
   - `Enabled`: `true` uses Redis, `false` falls back to in-memory cache
   - `InstanceName`

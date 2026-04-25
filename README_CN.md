@@ -35,9 +35,9 @@ KTNLocation 提供统一 HTTP 接口，覆盖：
 dotnet run --project .\Api
 ```
 
-开发环境 OpenAPI 地址：
+Swagger 地址（需开启 `DebugMode: true`）：
 
-- `http://localhost:5186/openapi/v1.json`
+- `http://localhost:[PORT]/swagger`
 
 ## 配置说明
 
@@ -51,6 +51,8 @@ dotnet run --project .\Api
   - `Redis`
 - `Server`
   - `Address`、`HttpPort`、`EnableHttps`、`HttpsPort`
+  - `DebugMode`：控制 `[DEBUG]` 级别日志输出及 Swagger UI 访问。
+  - `HttpsCertificatePath`、`HttpsPrivateKeyPath`、`HttpsCertificatePassword`：HTTPS 的 PEM 格式证书配置。
 - `Redis`
   - `Enabled`：`true` 使用 Redis，`false` 回退为内存缓存
   - `InstanceName`

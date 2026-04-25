@@ -12,6 +12,8 @@ public sealed class ServerOptions
 
     public int HttpsPort { get; set; } = 7044;
 
+    public bool DebugMode { get; set; } = false;
+
     public string? HttpsCertificatePath { get; set; }
 
     public string? HttpsPrivateKeyPath { get; set; }

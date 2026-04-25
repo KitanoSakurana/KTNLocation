@@ -6,14 +6,33 @@ namespace KTNLocation.Api.Logging;
 
 public static class KtnConsoleLogger
 {
+    public static LogLevel MinimumLevel { get; set; } = LogLevel.Information;
+
     public static void WriteLog(string source, string level, string message)
     {
-        var timestamp = DateTime.Now.ToString("HH:mm:ss");
-        var safeSource = Markup.Escape(source);
-        var safeMessage = Markup.Escape(message);
         var normalizedLevel = string.IsNullOrWhiteSpace(level)
             ? "INFO"
             : level.Trim().ToUpperInvariant();
+
+        var parsedLevel = normalizedLevel switch
+        {
+            "TRACE" => LogLevel.Trace,
+            "DEBUG" => LogLevel.Debug,
+            "INFO" => LogLevel.Information,
+            "WARN" => LogLevel.Warning,
+            "ERROR" => LogLevel.Error,
+            "CRIT" => LogLevel.Critical,
+            _ => LogLevel.Information
+        };
+
+        if (parsedLevel < MinimumLevel)
+        {
+            return;
+        }
+
+        var timestamp = DateTime.Now.ToString("HH:mm:ss");
+        var safeSource = Markup.Escape(source);
+        var safeMessage = Markup.Escape(message);
 
         var levelColor = normalizedLevel switch
         {

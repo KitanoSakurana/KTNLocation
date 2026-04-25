@@ -18,6 +18,8 @@ builder.Logging.ClearProviders();
 builder.Logging.AddProvider(new KtnConsoleLoggerProvider());
 
 var serverOptions = builder.Configuration.GetSection(ServerOptions.SectionName).Get<ServerOptions>() ?? new ServerOptions();
+KtnConsoleLogger.MinimumLevel = serverOptions.DebugMode ? LogLevel.Debug : LogLevel.Information;
+
 var redisOptions = builder.Configuration.GetSection(RedisOptions.SectionName).Get<RedisOptions>() ?? new RedisOptions();
 var listenUrls = BuildListenUrls(serverOptions);
 builder.WebHost.UseUrls(listenUrls);
@@ -109,11 +111,14 @@ var app = builder.Build();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
-app.UseSwagger();
-app.UseSwaggerUI(c =>
+if (serverOptions.DebugMode)
 {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "KTNLocation API v1");
-});
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "KTNLocation API v1");
+    });
+}
 
 if (serverOptions.EnableHttps)
 {
@@ -137,7 +142,7 @@ admin.MapGet("/status", () => Results.Json(new
 admin.MapPost("/geo/update", async (GeoDataUpdateService svc, CancellationToken ct) =>
 {
     await svc.RunUpdateCycleAsync(ct);
-    return Results.Json(new { status = "ok", message = "鏇存柊妫€鏌ュ凡瀹屾垚" });
+    return Results.Json(new { status = "ok", message = "Update check completed!" });
 });
 
 using (var scope = app.Services.CreateScope())
@@ -234,10 +239,13 @@ app.Lifetime.ApplicationStarted.Register(() =>
         KtnConsoleLogger.WriteLog("Program", "INFO", $"Server started on {url}");
     }
 
-    var httpBaseUrl = startedUrls.FirstOrDefault(x => x.StartsWith("http://", StringComparison.OrdinalIgnoreCase));
-    if (!string.IsNullOrWhiteSpace(httpBaseUrl))
+    if (serverOptions.DebugMode)
     {
-        KtnConsoleLogger.WriteLog("Program", "INFO", $"Swagger UI: {httpBaseUrl.TrimEnd('/')}/swagger");
+        var httpBaseUrl = startedUrls.FirstOrDefault(x => x.StartsWith("http://", StringComparison.OrdinalIgnoreCase));
+        if (!string.IsNullOrWhiteSpace(httpBaseUrl))
+        {
+            KtnConsoleLogger.WriteLog("Program", "INFO", $"Swagger UI: {httpBaseUrl.TrimEnd('/')}/swagger");
+        }
     }
 });
 
