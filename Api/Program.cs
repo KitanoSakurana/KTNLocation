@@ -10,23 +10,49 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Spectre.Console;
+using KTNLocation.Api.Logging;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Logging.ClearProviders();
+builder.Logging.AddProvider(new KtnConsoleLoggerProvider());
 
 var serverOptions = builder.Configuration.GetSection(ServerOptions.SectionName).Get<ServerOptions>() ?? new ServerOptions();
 var redisOptions = builder.Configuration.GetSection(RedisOptions.SectionName).Get<RedisOptions>() ?? new RedisOptions();
 var listenUrls = BuildListenUrls(serverOptions);
 builder.WebHost.UseUrls(listenUrls);
 
+builder.WebHost.ConfigureKestrel(kestrel =>
+{
+    if (serverOptions.EnableHttps && !string.IsNullOrWhiteSpace(serverOptions.HttpsCertificatePath) && !string.IsNullOrWhiteSpace(serverOptions.HttpsPrivateKeyPath))
+    {
+        var certPath = ResolvePath(serverOptions.HttpsCertificatePath);
+        var keyPath = ResolvePath(serverOptions.HttpsPrivateKeyPath);
+        var cert = string.IsNullOrWhiteSpace(serverOptions.HttpsCertificatePassword)
+            ? System.Security.Cryptography.X509Certificates.X509Certificate2.CreateFromPemFile(certPath, keyPath)
+            : System.Security.Cryptography.X509Certificates.X509Certificate2.CreateFromEncryptedPemFile(certPath, serverOptions.HttpsCertificatePassword.AsSpan(), keyPath);
+
+        kestrel.ConfigureHttpsDefaults(https =>
+        {
+            https.ServerCertificate = cert;
+        });
+    }
+});
+
 builder.Logging.AddFilter("Microsoft.Hosting.Lifetime", LogLevel.Warning);
 builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.Warning);
 builder.Logging.AddFilter("KTNLocation.Services.ServerRsaKeyStore", LogLevel.Warning);
 builder.Logging.AddFilter("KTNLocation.Services.GeoProviders.GeoDataBootstrapper", LogLevel.Warning);
 
-WriteStartupLog("Program", "INFO", "Starting KTNLocation...");
-WriteStartupLog("Program", "INFO", $"Environment: {builder.Environment.EnvironmentName}");
-WriteStartupLog("Program", "INFO", $"Log Level: {builder.Configuration["Logging:LogLevel:Default"] ?? "Information"}");
-WriteStartupLog("Program", "INFO", $"Configured URLs: {string.Join(", ", listenUrls)}");
+AnsiConsole.Write(
+    new FigletText("KTNLocation")
+        .LeftJustified()
+        .Color(Color.DeepSkyBlue1));
+
+KtnConsoleLogger.WriteLog("Program", "INFO", "Starting KTNLocation...");
+KtnConsoleLogger.WriteLog("Program", "INFO", $"Environment: {builder.Environment.EnvironmentName}");
+KtnConsoleLogger.WriteLog("Program", "INFO", $"Log Level: {builder.Configuration["Logging:LogLevel:Default"] ?? "Information"}");
+KtnConsoleLogger.WriteLog("Program", "INFO", $"Configured URLs: {string.Join(", ", listenUrls)}");
 
 builder.Services.Configure<KtnSecurityOptions>(builder.Configuration.GetSection(KtnSecurityOptions.SectionName));
 builder.Services.Configure<LocationCacheOptions>(builder.Configuration.GetSection(LocationCacheOptions.SectionName));
@@ -59,7 +85,8 @@ builder.Services.AddControllers()
     });
 builder.Services.Configure<MvcOptions>(o => o.Filters.Add(new ProducesAttribute("application/json")));
 
-builder.Services.AddOpenApi();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
 builder.Services.AddHttpClient();
 
 builder.Services.AddScoped<DbInitializer>();
@@ -82,10 +109,11 @@ var app = builder.Build();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
-if (app.Environment.IsDevelopment())
+app.UseSwagger();
+app.UseSwaggerUI(c =>
 {
-    app.MapOpenApi();
-}
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "KTNLocation API v1");
+});
 
 if (serverOptions.EnableHttps)
 {
@@ -109,7 +137,7 @@ admin.MapGet("/status", () => Results.Json(new
 admin.MapPost("/geo/update", async (GeoDataUpdateService svc, CancellationToken ct) =>
 {
     await svc.RunUpdateCycleAsync(ct);
-    return Results.Json(new { status = "ok", message = "更新检查已完成" });
+    return Results.Json(new { status = "ok", message = "鏇存柊妫€鏌ュ凡瀹屾垚" });
 });
 
 using (var scope = app.Services.CreateScope())
@@ -119,29 +147,29 @@ using (var scope = app.Services.CreateScope())
     {
         var safeKeySize = Math.Clamp(securityOptions.RsaKeySize, 1024, 8192);
 
-        WriteStartupLog("KtnSecurity", "DEBUG", "Generating/Loading server PEM key pair...");
+        KtnConsoleLogger.WriteLog("KtnSecurity", "DEBUG", "Generating/Loading server PEM key pair...");
         var keyStore = scope.ServiceProvider.GetRequiredService<ServerRsaKeyStore>();
         await keyStore.GetPublicKeyPemAsync();
-        WriteStartupLog("KtnSecurity", "INFO", $"RSA KeySize: {safeKeySize}");
-        WriteStartupLog("KtnSecurity", "INFO", $"Private PEM: {ResolvePath(securityOptions.ServerPrivateKeyPath)}");
-        WriteStartupLog("KtnSecurity", "INFO", $"Public PEM: {ResolvePath(securityOptions.ServerPublicKeyPath)}");
+        KtnConsoleLogger.WriteLog("KtnSecurity", "INFO", $"RSA KeySize: {safeKeySize}");
+        KtnConsoleLogger.WriteLog("KtnSecurity", "INFO", $"Private PEM: {ResolvePath(securityOptions.ServerPrivateKeyPath)}");
+        KtnConsoleLogger.WriteLog("KtnSecurity", "INFO", $"Public PEM: {ResolvePath(securityOptions.ServerPublicKeyPath)}");
     }
 
     var geoOptsInst = scope.ServiceProvider.GetRequiredService<IOptions<GeoProviderOptions>>().Value;
     var bootstrapper = scope.ServiceProvider.GetRequiredService<GeoDataBootstrapper>();
     if (geoOptsInst.WaitForDownloadOnStartup)
     {
-        WriteStartupLog("GeoData", "DEBUG", "Bootstrapping geo data...");
+        KtnConsoleLogger.WriteLog("GeoData", "DEBUG", "Bootstrapping geo data...");
         await bootstrapper.BootstrapAsync();
-        WriteStartupLog("GeoData", "INFO", "Geo data bootstrap completed.");
+        KtnConsoleLogger.WriteLog("GeoData", "INFO", "Geo data bootstrap completed.");
     }
     else
     {
-        WriteStartupLog("GeoData", "DEBUG", "Bootstrapping geo data in background...");
+        KtnConsoleLogger.WriteLog("GeoData", "DEBUG", "Bootstrapping geo data in background...");
         _ = bootstrapper.BootstrapAsync();
     }
 
-    WriteStartupLog("Database", "DEBUG", "Initializing database...");
+    KtnConsoleLogger.WriteLog("Database", "DEBUG", "Initializing database...");
     var initializer = scope.ServiceProvider.GetRequiredService<DbInitializer>();
     await initializer.InitializeAsync();
 
@@ -149,32 +177,32 @@ using (var scope = app.Services.CreateScope())
     if (!string.IsNullOrWhiteSpace(sqliteDataSource))
     {
         var fullPath = ResolvePath(sqliteDataSource);
-        WriteStartupLog("Database", "INFO", $"Initialized: {Path.GetFileName(fullPath)}");
-        WriteStartupLog("Database", "DEBUG", $"Full path: {fullPath}");
+        KtnConsoleLogger.WriteLog("Database", "INFO", $"Initialized: {Path.GetFileName(fullPath)}");
+        KtnConsoleLogger.WriteLog("Database", "DEBUG", $"Full path: {fullPath}");
     }
     else
     {
-        WriteStartupLog("Database", "INFO", "Initialized SQLite database.");
+        KtnConsoleLogger.WriteLog("Database", "INFO", "Initialized SQLite database.");
     }
 
     if (redisOptions.Enabled)
     {
-        WriteStartupLog("Cache", "INFO", $"Redis enabled. Endpoint: {ExtractRedisEndpoint(redisConn)}");
+        KtnConsoleLogger.WriteLog("Cache", "INFO", $"Redis enabled. Endpoint: {ExtractRedisEndpoint(redisConn)}");
     }
     else
     {
-        WriteStartupLog("Cache", "WARN", "Redis disabled. Using in-memory distributed cache.");
+        KtnConsoleLogger.WriteLog("Cache", "WARN", "Redis disabled. Using in-memory distributed cache.");
     }
 }
 
 var geoOpts = builder.Configuration.GetSection(GeoProviderOptions.SectionName).Get<GeoProviderOptions>() ?? new GeoProviderOptions();
 var providerOrder = geoOpts.ProviderOrder is { Length: > 0 }
     ? string.Join(" -> ", geoOpts.ProviderOrder.Distinct(StringComparer.OrdinalIgnoreCase))
-    : "(未配置)";
+    : "(鏈厤缃?";
 
-WriteStartupLog("GeoProvider", "INFO", $"ProviderOrder: {providerOrder}");
-WriteStartupLog("GeoProvider", "INFO", $"AutoDownloadOnStartup: {geoOpts.AutoDownloadOnStartup}");
-WriteStartupLog("GeoProvider", "INFO", $"UpdateIntervalHours: {geoOpts.UpdateIntervalHours}");
+KtnConsoleLogger.WriteLog("GeoProvider", "INFO", $"ProviderOrder: {providerOrder}");
+KtnConsoleLogger.WriteLog("GeoProvider", "INFO", $"AutoDownloadOnStartup: {geoOpts.AutoDownloadOnStartup}");
+KtnConsoleLogger.WriteLog("GeoProvider", "INFO", $"UpdateIntervalHours: {geoOpts.UpdateIntervalHours}");
 
 app.Lifetime.ApplicationStarted.Register(() =>
 {
@@ -188,10 +216,10 @@ app.Lifetime.ApplicationStarted.Register(() =>
         .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
         .ToArray();
 
-    WriteStartupLog("ApiRouter", "INFO", $"Registered {routeEndpoints.Length} routes");
+    KtnConsoleLogger.WriteLog("ApiRouter", "INFO", $"Registered {routeEndpoints.Length} routes");
     foreach (var route in routeEndpoints)
     {
-        WriteStartupLog("ApiRouter", "DEBUG", $"/{route.TrimStart('/')}");
+        KtnConsoleLogger.WriteLog("ApiRouter", "DEBUG", $"/{route.TrimStart('/')}");
     }
 
     var startedUrls = app.Urls.Count > 0 ? app.Urls.ToArray() : listenUrls;
@@ -199,31 +227,28 @@ app.Lifetime.ApplicationStarted.Register(() =>
     {
         if (url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
         {
-            WriteStartupLog("Program", "INFO", $"HTTPS started on {url}");
+            KtnConsoleLogger.WriteLog("Program", "INFO", $"HTTPS started on {url}");
             continue;
         }
 
-        WriteStartupLog("Program", "INFO", $"Server started on {url}");
+        KtnConsoleLogger.WriteLog("Program", "INFO", $"Server started on {url}");
     }
 
-    if (app.Environment.IsDevelopment())
+    var httpBaseUrl = startedUrls.FirstOrDefault(x => x.StartsWith("http://", StringComparison.OrdinalIgnoreCase));
+    if (!string.IsNullOrWhiteSpace(httpBaseUrl))
     {
-        var httpBaseUrl = startedUrls.FirstOrDefault(x => x.StartsWith("http://", StringComparison.OrdinalIgnoreCase));
-        if (!string.IsNullOrWhiteSpace(httpBaseUrl))
-        {
-            WriteStartupLog("Program", "INFO", $"OpenAPI: {httpBaseUrl.TrimEnd('/')}/openapi/v1.json");
-        }
+        KtnConsoleLogger.WriteLog("Program", "INFO", $"Swagger UI: {httpBaseUrl.TrimEnd('/')}/swagger");
     }
 });
 
 app.Lifetime.ApplicationStopping.Register(() =>
 {
-    WriteStartupLog("Program", "WARN", "Application is shutting down...");
+    KtnConsoleLogger.WriteLog("Program", "WARN", "Application is shutting down...");
 });
 
 app.Lifetime.ApplicationStopped.Register(() =>
 {
-    WriteStartupLog("Program", "INFO", "Application stopped.");
+    KtnConsoleLogger.WriteLog("Program", "INFO", "Application stopped.");
 });
 
 app.Run();
@@ -301,23 +326,3 @@ static string ResolvePath(string path)
         : Path.GetFullPath(path, Directory.GetCurrentDirectory());
 }
 
-static void WriteStartupLog(string source, string level, string message)
-{
-    var timestamp = DateTime.Now.ToString("HH:mm:ss");
-    var safeSource = Markup.Escape(source);
-    var safeMessage = Markup.Escape(message);
-    var normalizedLevel = string.IsNullOrWhiteSpace(level)
-        ? "INFO"
-        : level.Trim().ToUpperInvariant();
-
-    var levelColor = normalizedLevel switch
-    {
-        "DEBUG" => "dodgerblue1",
-        "INFO" => "green",
-        "WARN" => "yellow",
-        "ERROR" => "red",
-        _ => "silver"
-    };
-
-    AnsiConsole.MarkupLine($"[grey][[{timestamp}]][/] [deepskyblue1][[{safeSource}]][/] [{levelColor}][[{normalizedLevel}]][/] {safeMessage}");
-}
