@@ -1,3 +1,4 @@
+using System.Globalization;
 using KTNLocation.Models.Common;
 using KTNLocation.Models.Domain;
 using KTNLocation.Models.Dtos.Location;
@@ -42,9 +43,12 @@ public sealed class LocationController : ControllerBase
 
     [HttpGet("gps")]
     public async Task<ActionResult<ApiResponse<LocationResponse>>> LocateByGps(
-        [FromQuery] double latitude, [FromQuery] double longitude, [FromQuery] string? crs, CancellationToken ct)
+        [FromQuery] double? latitude, [FromQuery] double? longitude, [FromQuery] string? crs, CancellationToken ct)
     {
-        var result = await _locationService.ResolveByGpsAsync(latitude, longitude, crs, ct);
+        if (!TryResolveGpsInput(latitude, longitude, crs, out var resolvedLatitude, out var resolvedLongitude, out var resolvedCrs, out var errorMessage))
+            return BadRequest(ApiResponse<LocationResponse>.Fail(errorMessage));
+
+        var result = await _locationService.ResolveByGpsAsync(resolvedLatitude, resolvedLongitude, resolvedCrs, ct);
         return result is null
             ? NotFound(ApiResponse<LocationResponse>.Fail("GPS 坐标未命中位置库。"))
             : Ok(ApiResponse<LocationResponse>.Ok(ToResponse(result)));
@@ -158,6 +162,63 @@ public sealed class LocationController : ControllerBase
             return fwd.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
         return HttpContext.Connection.RemoteIpAddress?.ToString();
     }
+
+    private bool TryResolveGpsInput(
+        double? latitude,
+        double? longitude,
+        string? crs,
+        out double resolvedLatitude,
+        out double resolvedLongitude,
+        out string? resolvedCrs,
+        out string errorMessage)
+    {
+        resolvedLatitude = default;
+        resolvedLongitude = default;
+        resolvedCrs = NormalizeCrs(crs);
+        errorMessage = string.Empty;
+
+        if (latitude.HasValue ^ longitude.HasValue)
+        {
+            errorMessage = "latitude 与 longitude 需要同时提供。";
+            return false;
+        }
+
+        if (latitude.HasValue && longitude.HasValue)
+        {
+            resolvedLatitude = latitude.Value;
+            resolvedLongitude = longitude.Value;
+            if (string.IsNullOrWhiteSpace(resolvedCrs))
+                resolvedCrs = NormalizeCrs(Request.Headers["X-Geo-Crs"].ToString());
+            return true;
+        }
+
+        var latitudeFromHeader = Request.Headers["X-Geo-Latitude"].ToString();
+        var longitudeFromHeader = Request.Headers["X-Geo-Longitude"].ToString();
+        if (string.IsNullOrWhiteSpace(latitudeFromHeader) || string.IsNullOrWhiteSpace(longitudeFromHeader))
+        {
+            errorMessage = "未检测到 GPS 坐标。请先在前端申请定位权限后再调用该接口。可通过 query(latitude/longitude) 或请求头 X-Geo-Latitude、X-Geo-Longitude 传入坐标。";
+            return false;
+        }
+
+        if (!TryParseCoordinate(latitudeFromHeader, out resolvedLatitude)
+            || !TryParseCoordinate(longitudeFromHeader, out resolvedLongitude))
+        {
+            errorMessage = "GPS 坐标格式无效，latitude/longitude 需为数字。";
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(resolvedCrs))
+            resolvedCrs = NormalizeCrs(Request.Headers["X-Geo-Crs"].ToString());
+
+        return true;
+    }
+
+    private static string? NormalizeCrs(string? crs)
+        => string.IsNullOrWhiteSpace(crs) ? null : crs.Trim();
+
+    private static bool TryParseCoordinate(string raw, out double value)
+        => double.TryParse(raw, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out value)
+           || double.TryParse(raw, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.CurrentCulture, out value);
 
     private static LocationResponse ToResponse(LocationResolvedResult r) => new()
     {

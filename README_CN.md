@@ -87,6 +87,9 @@ Swagger 地址（需开启 `DebugMode: true`）：
 - `POST /api/location/library/county`
 - `POST /api/location/library/ip-range`
 
+> 浏览器场景建议直接使用首页的 **“申请定位并请求 /api/location/gps”** 按钮：会先申请定位权限，再自动请求接口。
+> 如果是程序调用，也可继续通过 query 参数（`latitude`、`longitude`、`crs`）或请求头（`X-Geo-Latitude`、`X-Geo-Longitude`、`X-Geo-Crs`）传入坐标。
+
 ### 管理接口
 
 - `GET /admin/status`

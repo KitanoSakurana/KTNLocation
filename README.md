@@ -87,6 +87,10 @@ Development overrides only: `Api/appsettings.Development.json` (recommended for 
 - `POST /api/location/library/county`
 - `POST /api/location/library/ip-range`
 
+> For browser usage, prefer the homepage button **"Request location and call /api/location/gps"**.
+> It requests geolocation permission first, then calls the API automatically.
+> Programmatic clients can still send coordinates using query params (`latitude`, `longitude`, `crs`) or headers (`X-Geo-Latitude`, `X-Geo-Longitude`, `X-Geo-Crs`).
+
 ### Admin
 
 - `GET /admin/status`

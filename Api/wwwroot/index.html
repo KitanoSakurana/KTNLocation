@@ -91,6 +91,7 @@
             letter-spacing: -0.04em;
             line-height: 1.1;
             background: linear-gradient(135deg, var(--text-primary) 0%, rgba(255, 255, 255, 0.4) 100%);
+            background-clip: text;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             opacity: 0;
@@ -225,6 +226,35 @@
             transition: transform 0.2s ease;
         }
 
+        .gps-card {
+            opacity: 0;
+            animation: slide-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            animation-delay: 0.45s;
+        }
+
+        .gps-hint {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        .gps-trigger {
+            opacity: 1;
+            animation: none;
+            margin-top: 0;
+        }
+
+        .gps-trigger:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        #gpsResult {
+            margin-top: 0;
+            white-space: pre-line;
+            color: var(--text-secondary);
+        }
+
         .api-link:hover svg {
             transform: translateX(4px);
         }
@@ -321,6 +351,16 @@
                 > <span id="logText">Establishing connection to Node<span class="loading-dots"></span></span>
             </div>
         </div>
+
+        <div class="status-card gps-card" id="gpsCard">
+            <div class="card-header">
+                <div class="card-title">Browser GPS Resolve</div>
+            </div>
+            <p class="gps-hint">点击后会先申请浏览器定位权限，再自动请求 <code>/api/location/gps</code> 获取定位结果。</p>
+            <button class="api-link gps-trigger" type="button" id="gpsLocateBtn">申请定位并请求 /api/location/gps</button>
+            <div class="terminal-block" id="gpsResult">> Waiting for location permission...</div>
+        </div>
+
         <a href="/swagger" class="api-link" target="_blank" id="swaggerLink">
             View Swagger UI
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -373,6 +413,72 @@
                 logText.style.color = 'var(--accent-primary)';
             }
         }
+
+        const gpsLocateBtn = document.getElementById('gpsLocateBtn');
+        const gpsResult = document.getElementById('gpsResult');
+
+        function setGpsResult(text, color = 'var(--text-secondary)') {
+            gpsResult.textContent = text;
+            gpsResult.style.color = color;
+        }
+
+        function getCurrentPositionAsync() {
+            return new Promise((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(resolve, reject, {
+                    enableHighAccuracy: true,
+                    timeout: 12000,
+                    maximumAge: 0
+                });
+            });
+        }
+
+        async function resolveByBrowserGps() {
+            if (!navigator.geolocation) {
+                setGpsResult('> 当前浏览器不支持 Geolocation API。', 'var(--accent-primary)');
+                return;
+            }
+
+            gpsLocateBtn.disabled = true;
+            gpsLocateBtn.textContent = '定位中...';
+            setGpsResult('> 正在申请定位权限...\n> 等待设备返回坐标。', '#4ade80');
+
+            try {
+                const position = await getCurrentPositionAsync();
+                const latitude = position.coords.latitude;
+                const longitude = position.coords.longitude;
+
+                setGpsResult(`> 坐标已获取：${latitude.toFixed(6)}, ${longitude.toFixed(6)}\n> 正在请求 /api/location/gps ...`, '#4ade80');
+
+                const response = await fetch('/api/location/gps', {
+                    method: 'GET',
+                    headers: {
+                        'X-Geo-Latitude': String(latitude),
+                        'X-Geo-Longitude': String(longitude),
+                        'X-Geo-Crs': 'wgs84'
+                    }
+                });
+                const payload = await response.json();
+
+                if (!response.ok || !payload?.success || !payload?.data) {
+                    const message = payload?.message || `请求失败（HTTP ${response.status}）`;
+                    setGpsResult(`> 请求失败\n> ${message}`, 'var(--accent-primary)');
+                    return;
+                }
+
+                const data = payload.data;
+                const locationText = `${data.country || ''}${data.province || ''}${data.city || ''}${data.county || ''}`;
+                const distanceText = data.distanceKm == null ? '-' : data.distanceKm;
+                setGpsResult(`> 定位成功\n> ${locationText}\n> 来源: ${data.source} | 距离: ${distanceText} km`, '#4ade80');
+            } catch (error) {
+                const message = error && error.message ? error.message : '定位失败（用户拒绝授权或请求超时）。';
+                setGpsResult(`> 定位失败\n> ${message}`, 'var(--accent-primary)');
+            } finally {
+                gpsLocateBtn.disabled = false;
+                gpsLocateBtn.textContent = '申请定位并请求 /api/location/gps';
+            }
+        }
+
+        gpsLocateBtn?.addEventListener('click', resolveByBrowserGps);
 
         // 检查环境来判断OpenAPI链接是否应该显示
         if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
